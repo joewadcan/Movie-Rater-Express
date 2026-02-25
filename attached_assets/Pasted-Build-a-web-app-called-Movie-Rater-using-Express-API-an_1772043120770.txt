@@ -1,0 +1,559 @@
+Build a web app called Movie Rater using Express (API) and React with Vite (frontend).
+This is version 1 — keep everything as simple as possible.
+
+════════════════════════════════════════
+STACK
+════════════════════════════════════════
+Backend:   Node.js + Express
+Frontend:  React 18 + Vite (no TypeScript, plain .jsx files)
+Database:  Postgres via the 'pg' package, connection via DATABASE_URL env var
+Styling:   One plain CSS file. No Tailwind, no CSS framework.
+Testing:   Jest, tests cover pure functions in movies-shared.js only
+
+════════════════════════════════════════
+HOW THE APP IS STRUCTURED
+════════════════════════════════════════
+One repo. Two folders:
+
+  /server   — Express API and database code
+  /client   — React + Vite frontend
+
+In production (and in Replit), Express serves the built Vite output
+as static files from /client/dist. The API and the frontend come from
+the same server on the same port.
+
+Dev workflow in Replit:
+  npm run build   — Vite builds /client into /client/dist
+  npm start       — Express starts, serves /client/dist + /api routes
+
+════════════════════════════════════════
+WHAT THE APP DOES
+════════════════════════════════════════
+Two views (single page app with React Router):
+
+LIST VIEW (/)
+  - Fetches all movies from GET /api/movies
+  - Displays a table: Title, Year, Genre, Avg Rating, Total Ratings
+  - Each title links to the detail view
+  - An "Add Movie" button toggles an inline form
+  - Add Movie form fields: Title, Year, Genre (all required)
+  - On submit: POST to /api/movies, hide form, refresh list
+
+DETAIL VIEW (/movies/:id)
+  - Fetches movie from GET /api/movies/:id
+  - Displays: Title, Year, Genre, star rating, total ratings
+  - Five clickable star buttons (1–5) to submit a rating
+  - On star click: POST to /api/movies/:id/rate, update display without reload
+  - A "← Back to list" link
+
+════════════════════════════════════════
+FILE STRUCTURE
+════════════════════════════════════════
+movies-shared.js                — pure functions, no imports, used by server + tests
+server/
+  index.js                      — Express app: API routes + serve /client/dist
+  db.js                         — all Postgres queries
+  seed.js                       — init DB tables + seed 10 films on first run
+client/
+  index.html                    — Vite entry point
+  src/
+    main.jsx                    — React entry, sets up React Router
+    App.jsx                     — top-level router (/ and /movies/:id)
+    pages/
+      MovieList.jsx             — list view + add movie form
+      MovieDetail.jsx           — detail view + star rating
+    api.js                      — fetch wrapper functions for all API calls
+  vite.config.js                — Vite config
+__tests__/
+  movies.test.js                — Jest tests for movies-shared.js
+package.json                    — root package.json, scripts for both client + server
+.env                            — DATABASE_URL (Replit Secrets tab)
+.env.example                    — DATABASE_URL=your-neon-connection-string-here
+.gitignore                      — node_modules, .env, client/dist
+.github/workflows/test.yml      — GitHub Actions CI
+
+════════════════════════════════════════
+MOVIES-SHARED.JS  (root level)
+════════════════════════════════════════
+Pure functions only. No imports. No side effects. No DB calls.
+Used by server/index.js (validation) and __tests__/movies.test.js.
+
+  averageRating(ratings)
+    Input:   array of numbers
+    Returns: average rounded to 1 decimal place, 0 if array is empty or null
+
+  formatStars(score)
+    Input:   number 0–5
+    Returns: star string — e.g. 3 → "★★★☆☆"
+    Rounds to nearest whole number
+
+  filterByGenre(movies, genre)
+    Input:   array of movie objects (each has a genre property), genre string
+    Returns: filtered array, case-insensitive
+    Returns full array if genre is "all" or falsy
+
+  sortByRating(movies)
+    Input:   array of movie objects, each may have an avgRating property
+    Returns: new array sorted by avgRating descending, unrated movies last
+    Must not mutate the input array
+
+  isValidRating(value)
+    Returns true only if value is an integer between 1 and 5 inclusive
+
+  isValidYear(value)
+    Returns true if value is an integer between 1888 and current year inclusive
+    1888 is the year of the first known film
+
+At the bottom of the file:
+  if (typeof module !== 'undefined') {
+    module.exports = { averageRating, formatStars, filterByGenre, sortByRating, isValidRating, isValidYear };
+  }
+
+════════════════════════════════════════
+SERVER/DB.JS
+════════════════════════════════════════
+Use the 'pg' package. Read DATABASE_URL from process.env.
+
+  const { Pool } = require('pg');
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+
+Export these functions:
+
+  initDb()
+    CREATE TABLE IF NOT EXISTS movies (
+      id         SERIAL PRIMARY KEY,
+      title      TEXT NOT NULL,
+      year       INTEGER NOT NULL,
+      genre      TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS ratings (
+      id         SERIAL PRIMARY KEY,
+      movie_id   INTEGER REFERENCES movies(id),
+      score      INTEGER NOT NULL CHECK (score >= 1 AND score <= 5),
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+  seedMovies()
+    Check if movies table is empty. If empty, insert these 10 films:
+      The Godfather             | 1972 | Crime
+      Pulp Fiction              | 1994 | Crime
+      The Shawshank Redemption  | 1994 | Drama
+      Schindler's List          | 1993 | Drama
+      2001: A Space Odyssey     | 1968 | Sci-Fi
+      Blade Runner              | 1982 | Sci-Fi
+      Chinatown                 | 1974 | Thriller
+      Mulholland Drive          | 2001 | Thriller
+      Singin' in the Rain       | 1952 | Musical
+      Sunset Boulevard          | 1950 | Drama
+    If not empty, do nothing.
+
+  getAllMovies()
+    SELECT movies.id, movies.title, movies.year, movies.genre,
+           ROUND(AVG(ratings.score)::numeric, 1) AS avg_rating,
+           COUNT(ratings.id) AS total_ratings
+    FROM movies
+    LEFT JOIN ratings ON ratings.movie_id = movies.id
+    GROUP BY movies.id
+    ORDER BY movies.title ASC
+
+  getMovieById(id)
+    SELECT single movie row by id. Return null if not found.
+
+  getRatingsForMovie(movieId)
+    SELECT score FROM ratings WHERE movie_id = $1 ORDER BY created_at DESC
+    Return array of score integers only (not full rows)
+
+  addMovie(title, year, genre)
+    INSERT INTO movies (title, year, genre) VALUES ($1, $2, $3) RETURNING *
+    Return the new row
+
+  addRating(movieId, score)
+    INSERT INTO ratings (movie_id, score) VALUES ($1, $2)
+    Then query and return updated avg_rating and total_ratings for that movie
+
+════════════════════════════════════════
+SERVER/SEED.JS
+════════════════════════════════════════
+  const { initDb, seedMovies } = require('./db');
+
+  async function runSeed() {
+    await initDb();
+    await seedMovies();
+  }
+
+  module.exports = { runSeed };
+
+  if (require.main === module) {
+    runSeed().then(() => process.exit(0));
+  }
+
+════════════════════════════════════════
+SERVER/INDEX.JS
+════════════════════════════════════════
+  const express = require('express');
+  const path = require('path');
+  const { runSeed } = require('./seed');
+  const db = require('./db');
+  const { isValidRating, isValidYear, averageRating } = require('../movies-shared');
+
+  const app = express();
+  app.use(express.json());
+
+  // Serve built Vite frontend
+  app.use(express.static(path.join(__dirname, '../client/dist')));
+
+  // Run DB init + seed on startup (safe to run every time)
+  runSeed();
+
+  // ── API ROUTES ──────────────────────────────────────────────────────────────
+
+  GET /api/movies
+    Call getAllMovies(). Return JSON array.
+
+  POST /api/movies
+    Read title, year, genre from req.body.
+    Validate: all fields present, isValidYear(Number(year)).
+    If invalid: return 400 { error: 'Invalid fields' }.
+    Call addMovie(title, year, genre). Return new movie with status 201.
+
+  GET /api/movies/:id
+    Call getMovieById(id) and getRatingsForMovie(id).
+    If movie not found: return 404 { error: 'Not found' }.
+    Compute avgRating using averageRating(ratings).
+    Return { ...movie, avgRating, totalRatings: ratings.length, ratings }.
+
+  POST /api/movies/:id/rate
+    Read score from req.body.
+    Validate using isValidRating(Number(score)).
+    If invalid: return 400 { error: 'Invalid rating' }.
+    Call addRating(id, score). Return result.
+
+  // Catch-all: send index.html for all non-API routes (React Router)
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+  });
+
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+════════════════════════════════════════
+CLIENT/VITE.CONFIG.JS
+════════════════════════════════════════
+  import { defineConfig } from 'vite';
+  import react from '@vitejs/plugin-react';
+
+  export default defineConfig({
+    plugins: [react()],
+    build: {
+      outDir: 'dist'
+    }
+  });
+
+════════════════════════════════════════
+CLIENT/SRC/API.JS
+════════════════════════════════════════
+All fetch calls live here. Components import from this file only.
+
+  export async function getMovies() { ... GET /api/movies }
+  export async function getMovie(id) { ... GET /api/movies/:id }
+  export async function addMovie(data) { ... POST /api/movies }
+  export async function rateMovie(id, score) { ... POST /api/movies/:id/rate }
+
+════════════════════════════════════════
+CLIENT/SRC/MAIN.JSX
+════════════════════════════════════════
+  import React from 'react';
+  import ReactDOM from 'react-dom/client';
+  import { BrowserRouter } from 'react-router-dom';
+  import App from './App';
+  import '../index.css';  (or './index.css' — wherever the CSS lives)
+
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  );
+
+════════════════════════════════════════
+CLIENT/SRC/APP.JSX
+════════════════════════════════════════
+  import { Routes, Route } from 'react-router-dom';
+  import MovieList from './pages/MovieList';
+  import MovieDetail from './pages/MovieDetail';
+
+  export default function App() {
+    return (
+      <Routes>
+        <Route path="/" element={<MovieList />} />
+        <Route path="/movies/:id" element={<MovieDetail />} />
+      </Routes>
+    );
+  }
+
+════════════════════════════════════════
+CLIENT/SRC/PAGES/MOVIELIST.JSX
+════════════════════════════════════════
+On mount: call getMovies(), store in state, render table.
+
+Table columns: Title (link to /movies/:id), Year, Genre, Rating, # Ratings
+Rating column: display avgRating as a number and star string side by side.
+
+"Add Movie" button: toggles form visibility.
+Form fields: Title (text), Year (number), Genre (text). All required.
+On submit: call addMovie(), hide form, reload movie list.
+Show a simple error message if the POST fails.
+
+════════════════════════════════════════
+CLIENT/SRC/PAGES/MOVIEDETAIL.JSX
+════════════════════════════════════════
+Read :id from URL params. On mount: call getMovie(id), store in state.
+
+Display: Title, Year, Genre, star string, total ratings.
+
+Five star buttons labeled ★ (1–5).
+On click: call rateMovie(id, score), update avgRating and totalRatings in state.
+Show a "← Back to list" link to /.
+
+════════════════════════════════════════
+PACKAGE.JSON  (root)
+════════════════════════════════════════
+{
+  "name": "movie-rater",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "node server/index.js",
+    "build": "cd client && npm install && npm run build",
+    "start": "node server/index.js",
+    "test": "jest --watchAll=false --verbose"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "pg": "^8.11.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js"],
+    "transform": {}
+  }
+}
+
+════════════════════════════════════════
+CLIENT/PACKAGE.JSON
+════════════════════════════════════════
+{
+  "name": "movie-rater-client",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-router-dom": "^6.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite": "^5.0.0"
+  }
+}
+
+════════════════════════════════════════
+SERVER/INDEX.JS — DOTENV
+════════════════════════════════════════
+Add this as the very first line of server/index.js:
+  require('dotenv').config();
+
+This loads DATABASE_URL from .env when running locally in Replit.
+On Vercel the env var is set in the dashboard — dotenv is ignored.
+
+════════════════════════════════════════
+__TESTS__/MOVIES.TEST.JS
+════════════════════════════════════════
+const {
+  averageRating,
+  formatStars,
+  filterByGenre,
+  sortByRating,
+  isValidRating,
+  isValidYear
+} = require('../movies-shared');
+
+// ── averageRating ─────────────────────────────────────────────────────────────
+test('averageRating returns 0 for empty array', () => {
+  expect(averageRating([])).toBe(0);
+});
+test('averageRating returns 0 for null', () => {
+  expect(averageRating(null)).toBe(0);
+});
+test('averageRating returns correct average', () => {
+  expect(averageRating([4, 2])).toBe(3);
+});
+test('averageRating rounds to 1 decimal', () => {
+  expect(averageRating([1, 2, 3])).toBe(2);
+});
+
+// ── formatStars ───────────────────────────────────────────────────────────────
+test('formatStars returns 5 filled stars for score 5', () => {
+  expect(formatStars(5)).toBe('★★★★★');
+});
+test('formatStars returns correct mix for score 3', () => {
+  expect(formatStars(3)).toBe('★★★☆☆');
+});
+test('formatStars returns all empty for score 0', () => {
+  expect(formatStars(0)).toBe('☆☆☆☆☆');
+});
+
+// ── isValidRating ─────────────────────────────────────────────────────────────
+test('isValidRating accepts 1', () => {
+  expect(isValidRating(1)).toBe(true);
+});
+test('isValidRating accepts 5', () => {
+  expect(isValidRating(5)).toBe(true);
+});
+test('isValidRating rejects 0', () => {
+  expect(isValidRating(0)).toBe(false);
+});
+test('isValidRating rejects 6', () => {
+  expect(isValidRating(6)).toBe(false);
+});
+test('isValidRating rejects decimals', () => {
+  expect(isValidRating(3.5)).toBe(false);
+});
+
+// ── isValidYear ───────────────────────────────────────────────────────────────
+test('isValidYear accepts 1972', () => {
+  expect(isValidYear(1972)).toBe(true);
+});
+test('isValidYear accepts 1888', () => {
+  expect(isValidYear(1888)).toBe(true);
+});
+test('isValidYear rejects 1887', () => {
+  expect(isValidYear(1887)).toBe(false);
+});
+test('isValidYear rejects future year', () => {
+  expect(isValidYear(new Date().getFullYear() + 1)).toBe(false);
+});
+test('isValidYear rejects decimals', () => {
+  expect(isValidYear(1999.5)).toBe(false);
+});
+
+// ── filterByGenre ─────────────────────────────────────────────────────────────
+const TEST_MOVIES = [
+  { id: 1, title: 'Movie A', genre: 'Drama',    avgRating: 4 },
+  { id: 2, title: 'Movie B', genre: 'Crime',    avgRating: 3 },
+  { id: 3, title: 'Movie C', genre: 'Drama',    avgRating: 5 },
+  { id: 4, title: 'Movie D', genre: 'Sci-Fi',   avgRating: 2 },
+];
+
+test('filterByGenre returns all for "all"', () => {
+  expect(filterByGenre(TEST_MOVIES, 'all').length).toBe(4);
+});
+test('filterByGenre filters correctly', () => {
+  expect(filterByGenre(TEST_MOVIES, 'Drama').length).toBe(2);
+});
+test('filterByGenre is case-insensitive', () => {
+  expect(filterByGenre(TEST_MOVIES, 'drama').length).toBe(2);
+});
+test('filterByGenre returns empty array when no match', () => {
+  expect(filterByGenre(TEST_MOVIES, 'Musical').length).toBe(0);
+});
+
+// ── sortByRating ──────────────────────────────────────────────────────────────
+test('sortByRating puts highest rated first', () => {
+  expect(sortByRating(TEST_MOVIES)[0].id).toBe(3);
+});
+test('sortByRating does not mutate original array', () => {
+  const copy = [...TEST_MOVIES];
+  sortByRating(TEST_MOVIES);
+  expect(TEST_MOVIES[0].id).toBe(copy[0].id);
+});
+test('sortByRating handles movies with no avgRating', () => {
+  const movies = [{ id: 'a' }, { id: 'b', avgRating: 3 }];
+  expect(sortByRating(movies)[0].id).toBe('b');
+});
+
+════════════════════════════════════════
+.GITHUB/WORKFLOWS/TEST.YML
+════════════════════════════════════════
+name: Run Tests
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install root dependencies
+        run: npm install
+      - name: Run tests
+        run: npm test
+
+Note: tests only cover movies-shared.js pure functions.
+No DATABASE_URL secret is needed in GitHub Actions.
+The client is NOT built in CI — only server-side logic is tested.
+
+════════════════════════════════════════
+.REPLIT
+════════════════════════════════════════
+run = "npm run build && npm start"
+
+════════════════════════════════════════
+VERCEL DEPLOYMENT
+════════════════════════════════════════
+Vercel does not natively run persistent Express servers.
+Use the vercel-node adapter by adding this vercel.json to the root:
+
+  {
+    "version": 2,
+    "builds": [
+      { "src": "server/index.js", "use": "@vercel/node" },
+      { "src": "client/package.json", "use": "@vercel/static-build",
+        "config": { "distDir": "dist" } }
+    ],
+    "routes": [
+      { "src": "/api/(.*)", "dest": "server/index.js" },
+      { "src": "/(.*)", "dest": "client/dist/$1" }
+    ]
+  }
+
+Change app.listen() in server/index.js to:
+  if (require.main === module) {
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  }
+  module.exports = app;
+
+Required env var in Vercel dashboard: DATABASE_URL
+
+════════════════════════════════════════
+.GITIGNORE
+════════════════════════════════════════
+node_modules
+.env
+client/dist
+client/node_modules
+
+════════════════════════════════════════
+CONSTRAINTS
+════════════════════════════════════════
+- No authentication or login
+- No TypeScript
+- No Tailwind or any CSS framework
+- No features not listed above
+- All DB calls go through server/db.js only — never query from React
+- Keep every file as short as possible
+- The React frontend is a pure SPA — it only talks to the Express API
