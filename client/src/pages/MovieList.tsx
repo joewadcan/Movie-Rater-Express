@@ -20,9 +20,12 @@ function GenreBadge({ genre }: { genre: string }) {
   const colorMap: Record<string, string> = {
     Crime: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
     Drama: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-    "Sci-Fi": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-    Thriller: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-    Musical: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+    "Sci-Fi":
+      "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+    Thriller:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+    Musical:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
   };
   const colors = colorMap[genre] || "bg-muted text-muted-foreground";
   return (
@@ -35,16 +38,31 @@ function GenreBadge({ genre }: { genre: string }) {
   );
 }
 
-function RatingDisplay({ avgRating, totalRatings }: { avgRating: number; totalRatings: number }) {
+function RatingDisplay({
+  avgRating,
+  totalRatings,
+}: {
+  avgRating: number;
+  totalRatings: number;
+}) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-amber-500 dark:text-amber-400 text-sm tracking-wide" data-testid="text-stars">
+      <span
+        className="text-amber-500 dark:text-amber-400 text-sm tracking-wide"
+        data-testid="text-stars"
+      >
         {formatStars(avgRating)}
       </span>
-      <span className="text-sm font-medium text-foreground" data-testid="text-avg-rating">
+      <span
+        className="text-sm font-medium text-foreground"
+        data-testid="text-avg-rating"
+      >
         {avgRating > 0 ? avgRating.toFixed(1) : "—"}
       </span>
-      <span className="text-xs text-muted-foreground" data-testid="text-total-ratings">
+      <span
+        className="text-xs text-muted-foreground"
+        data-testid="text-total-ratings"
+      >
         ({totalRatings})
       </span>
     </div>
@@ -63,7 +81,11 @@ export default function MovieList() {
   });
 
   const addMovieMutation = useMutation({
-    mutationFn: async (data: { title: string; year: number; genre: string }) => {
+    mutationFn: async (data: {
+      title: string;
+      year: number;
+      genre: string;
+    }) => {
       const res = await apiRequest("POST", "/api/movies", data);
       return res.json();
     },
@@ -73,17 +95,28 @@ export default function MovieList() {
       setTitle("");
       setYear("");
       setGenre("");
-      toast({ title: "Movie added", description: "The movie has been added to the list." });
+      toast({
+        title: "Movie added",
+        description: "The movie has been added to the list.",
+      });
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !year.trim() || !genre.trim()) return;
-    addMovieMutation.mutate({ title: title.trim(), year: Number(year), genre: genre.trim() });
+    addMovieMutation.mutate({
+      title: title.trim(),
+      year: Number(year),
+      genre: genre.trim(),
+    });
   };
 
   return (
@@ -95,10 +128,15 @@ export default function MovieList() {
               <Film className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
-                Movie Rater
+              <h1
+                className="text-2xl font-bold tracking-tight text-foreground"
+                data-testid="text-page-title"
+              >
+                Movie Ratings
               </h1>
-              <p className="text-sm text-muted-foreground">Rate and discover classic films</p>
+              <p className="text-sm text-muted-foreground">
+                Rate and discover classic films
+              </p>
             </div>
           </div>
           <Button
@@ -106,15 +144,24 @@ export default function MovieList() {
             onClick={() => setShowForm(!showForm)}
             variant={showForm ? "secondary" : "default"}
           >
-            {showForm ? <X className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+            {showForm ? (
+              <X className="w-4 h-4 mr-2" />
+            ) : (
+              <Plus className="w-4 h-4 mr-2" />
+            )}
             {showForm ? "Cancel" : "Add Movie"}
           </Button>
         </div>
 
         {showForm && (
           <Card className="mb-6 p-6 border border-card-border bg-card">
-            <h2 className="text-lg font-semibold mb-4 text-foreground">Add a New Movie</h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <h2 className="text-lg font-semibold mb-4 text-foreground">
+              Add a New Movie
+            </h2>
+            <form
+              onSubmit={handleSubmit}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+            >
               <div className="space-y-2">
                 <Label htmlFor="title">Title</Label>
                 <Input
@@ -194,12 +241,18 @@ export default function MovieList() {
                 >
                   <div className="grid grid-cols-12 gap-4 items-center">
                     <div className="col-span-12 sm:col-span-5">
-                      <span className="font-medium text-foreground" data-testid={`text-title-${movie.id}`}>
+                      <span
+                        className="font-medium text-foreground"
+                        data-testid={`text-title-${movie.id}`}
+                      >
                         {movie.title}
                       </span>
                     </div>
                     <div className="col-span-4 sm:col-span-1 text-center">
-                      <span className="text-sm text-muted-foreground" data-testid={`text-year-${movie.id}`}>
+                      <span
+                        className="text-sm text-muted-foreground"
+                        data-testid={`text-year-${movie.id}`}
+                      >
                         {movie.year}
                       </span>
                     </div>
@@ -207,7 +260,10 @@ export default function MovieList() {
                       <GenreBadge genre={movie.genre} />
                     </div>
                     <div className="col-span-3 sm:col-span-3 flex justify-center">
-                      <RatingDisplay avgRating={movie.avgRating} totalRatings={movie.totalRatings} />
+                      <RatingDisplay
+                        avgRating={movie.avgRating}
+                        totalRatings={movie.totalRatings}
+                      />
                     </div>
                     <div className="col-span-1 flex justify-end">
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -220,11 +276,16 @@ export default function MovieList() {
         ) : (
           <Card className="p-12 text-center border border-card-border bg-card">
             <Film className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No movies yet</h3>
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              No movies yet
+            </h3>
             <p className="text-sm text-muted-foreground mb-4">
               Get started by adding your first movie to rate.
             </p>
-            <Button data-testid="button-add-first-movie" onClick={() => setShowForm(true)}>
+            <Button
+              data-testid="button-add-first-movie"
+              onClick={() => setShowForm(true)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Your First Movie
             </Button>
@@ -234,7 +295,8 @@ export default function MovieList() {
         {movies && movies.length > 0 && (
           <div className="mt-4 text-center">
             <p className="text-xs text-muted-foreground">
-              {movies.length} {movies.length === 1 ? "movie" : "movies"} in collection
+              {movies.length} {movies.length === 1 ? "movie" : "movies"} in
+              collection
             </p>
           </div>
         )}

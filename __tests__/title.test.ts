@@ -2,8 +2,8 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 describe("App title", () => {
-  it("has the correct title in index.html", () => {
-    const html = readFileSync(resolve(__dirname, "../client/index.html"), "utf-8");
-    expect(html).toContain("<title>Movie Rater - Rate and Discover Classic Films</title>");
+  it("has the correct H1 content in MovieList.tsx", () => {
+    const source = readFileSync(resolve(__dirname, "../client/src/pages/MovieList.tsx"), "utf-8");
+    expect(source).toContain("Movie Ratings");
   });
 });
