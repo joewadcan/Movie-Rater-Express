@@ -17,7 +17,10 @@ export const ratings = pgTable("ratings", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertMovieSchema = createInsertSchema(movies).omit({
+export const insertMovieSchema = createInsertSchema(movies, {
+  title: z.string().min(1),
+  genre: z.string().min(1),
+}).omit({
   id: true,
   createdAt: true,
 });
