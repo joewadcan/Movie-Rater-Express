@@ -135,7 +135,7 @@ export default function MovieList() {
                 Movie Rater
               </h1>
               <p className="text-sm text-muted-foreground">
-                Rate and discover classic films
+                Rate and discover classic films by Joe
               </p>
             </div>
           </div>
