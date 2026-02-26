@@ -7,7 +7,7 @@ describe("App title", () => {
       resolve(__dirname, "../client/src/pages/MovieList.tsx"),
       "utf-8",
     );
-    expect(source).toContain("Movie Rater");
+    expect(source).toContain("Movie Ratings");
   });
 });
 

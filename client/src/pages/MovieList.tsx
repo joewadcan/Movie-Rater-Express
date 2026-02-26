@@ -132,7 +132,7 @@ export default function MovieList() {
                 className="text-2xl font-bold tracking-tight text-foreground"
                 data-testid="text-page-title"
               >
-                Movie Rater
+                Movie Ratings
               </h1>
               <p className="text-sm text-muted-foreground">
                 Rate and discover classic films by Joe
