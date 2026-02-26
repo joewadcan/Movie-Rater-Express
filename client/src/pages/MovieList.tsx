@@ -135,7 +135,7 @@ export default function MovieList() {
                 Movie Ratings
               </h1>
               <p className="text-sm text-muted-foreground">
-                Rate and discover classic films by Joe
+                Rate and discover classic films by Bob
               </p>
             </div>
           </div>
